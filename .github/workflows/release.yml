@@ -1,0 +1,78 @@
+name: Build and Release
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Release version (e.g., v1.0.0)'
+        required: true
+        type: string
+
+jobs:
+  build:
+    name: Build and Release
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: 'stable'
+
+      - name: Install GNU parallel
+        run: sudo apt-get update && sudo apt-get install parallel
+
+      - name: Set binary version
+        run: sed -i "s/REPLACE_WITH_VERSION_IN_BUILD/${{ github.event.inputs.version }}/g" main.go
+
+      - name: Build for all platforms in parallel
+        run: |
+          VERSION=${{ github.event.inputs.version }}
+          export VERSION
+
+          build_commands="
+          mkdir -p dist/linux-amd64 && GOOS=linux GOARCH=amd64 go build -o dist/linux-amd64/differ .;
+          mkdir -p dist/linux-arm64 && GOOS=linux GOARCH=arm64 go build -o dist/linux-arm64/differ .;
+          mkdir -p dist/darwin-amd64 && GOOS=darwin GOARCH=amd64 go build -o dist/darwin-amd64/differ .;
+          mkdir -p dist/darwin-arm64 && GOOS=darwin GOARCH=arm64 go build -o dist/darwin-arm64/differ .;
+          mkdir -p dist/windows-amd64 && GOOS=windows GOARCH=amd64 go build -o dist/windows-amd64/differ.exe .;
+          mkdir -p dist/windows-arm64 && GOOS=windows GOARCH=arm64 go build -o dist/windows-arm64/differ.exe .
+          "
+
+          # Execute build commands in parallel
+          echo "$build_commands" | parallel -j 6 -- bash -c {}
+
+      - name: Compress for all platforms in parallel
+        run: |
+          VERSION=${{ github.event.inputs.version }}
+          export VERSION
+
+          compress_commands="
+          tar -czvf dist/differ-\${VERSION}-linux-amd64.tar.gz -C dist/linux-amd64 differ;
+          tar -czvf dist/differ-\${VERSION}-linux-arm64.tar.gz -C dist/linux-arm64 differ;
+          tar -czvf dist/differ-\${VERSION}-darwin-amd64.tar.gz -C dist/darwin-amd64 differ;
+          tar -czvf dist/differ-\${VERSION}-darwin-arm64.tar.gz -C dist/darwin-arm64 differ;
+          cd dist/windows-amd64 && zip ../differ-\${VERSION}-windows-amd64.zip differ.exe && cd ../..;
+          cd dist/windows-arm64 && zip ../differ-\${VERSION}-windows-arm64.zip differ.exe && cd ../..
+          "
+
+          # Execute compress commands in parallel
+          echo "$compress_commands" | parallel -j 6 -- bash -c {}
+
+      - name: Create Release
+        id: create_release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            dist/differ-${{ github.event.inputs.version }}-linux-amd64.tar.gz
+            dist/differ-${{ github.event.inputs.version }}-linux-arm64.tar.gz
+            dist/differ-${{ github.event.inputs.version }}-darwin-amd64.tar.gz
+            dist/differ-${{ github.event.inputs.version }}-darwin-arm64.tar.gz
+            dist/differ-${{ github.event.inputs.version }}-windows-amd64.zip
+            dist/differ-${{ github.event.inputs.version }}-windows-arm64.zip
+          tag_name: ${{ github.event.inputs.version }}
+          make_latest: true
+          token: ${{ secrets.hehe }}
