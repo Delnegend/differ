@@ -25,9 +25,6 @@ jobs:
       - name: Install GNU parallel
         run: sudo apt-get update && sudo apt-get install parallel
 
-      - name: Set binary version
-        run: sed -i "s/REPLACE_WITH_VERSION_IN_BUILD/${{ github.event.inputs.version }}/g" main.go
-
       - name: Build for all platforms in parallel
         run: |
           VERSION=${{ github.event.inputs.version }}
