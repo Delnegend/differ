@@ -32,10 +32,11 @@ func loadImage(filePath string) (image.Image, error) {
 	return img, nil
 }
 
-// generateOutputFilename creates the output filename based on the input path and a suffix.
-// Example: generateOutputFilename("path/to/image.png", "BASE") -> "image.BASE.png"
-// Example: generateOutputFilename("path/to/image.jpg", "DIFF") -> "image.DIFF.jpg"
+// generateOutputFilename creates the full output path based on the input path and a suffix.
+// Example: generateOutputFilename("path/to/image.png", "BASE") -> "path/to/image.BASE.png"
+// Example: generateOutputFilename("path/to/image.jpg", "DIFF") -> "path/to/image.DIFF.jpg"
 func generateOutputFilename(inputPath, suffix string) (string, error) {
+	dir := filepath.Dir(inputPath)
 	ext := filepath.Ext(inputPath)
 	baseName := filepath.Base(inputPath)
 	if len(ext) > 0 {
@@ -50,13 +51,15 @@ func generateOutputFilename(inputPath, suffix string) (string, error) {
 		suffix = "." + suffix
 	}
 
-	return fmt.Sprintf("%s%s%s", baseName, suffix, ext), nil
+	outputBaseName := fmt.Sprintf("%s%s%s", baseName, suffix, ext)
+	return filepath.Join(dir, outputBaseName), nil
 }
 
-// generateOriginalFilename reconstructs the original filename by removing suffixes.
-// Example: generateOriginalFilename("image.BASE.png") -> "image.png"
-// Example: generateOriginalFilename("image.DIFF.jpg") -> "image.jpg"
+// generateOriginalFilename reconstructs the full original filename path by removing suffixes.
+// Example: generateOriginalFilename("path/to/image.BASE.png") -> "path/to/image.png"
+// Example: generateOriginalFilename("path/to/image.DIFF.jpg") -> "path/to/image.jpg"
 func generateOriginalFilename(inputPath string) (string, error) {
+	dir := filepath.Dir(inputPath)
 	ext := filepath.Ext(inputPath)
 	baseName := filepath.Base(inputPath)
 	nameWithoutExt := baseName
@@ -81,7 +84,8 @@ func generateOriginalFilename(inputPath string) (string, error) {
 		return "", fmt.Errorf("could not determine original base name for %s", inputPath)
 	}
 
-	return fmt.Sprintf("%s%s", originalName, ext), nil
+	originalFullName := fmt.Sprintf("%s%s", originalName, ext)
+	return filepath.Join(dir, originalFullName), nil
 }
 
 // copyFile copies a file from src to dst.
@@ -127,7 +131,7 @@ func createDiffImage(baseImg, currentImg image.Image) (*image.RGBA, int) {
 	return diffImg, diffPixels
 }
 
-// processPair compares two images, creates a diff image, and saves it.
+// processPair compares two images, creates a diff image, and saves it next to the current image.
 // Designed to be run in a goroutine.
 func processPair(wg *sync.WaitGroup, prevImg image.Image, currentImg image.Image, prevPath, currentPath string) {
 	defer wg.Done() // Signal completion when this function returns
@@ -147,7 +151,7 @@ func processPair(wg *sync.WaitGroup, prevImg image.Image, currentImg image.Image
 	diffImg, diffPixels := createDiffImage(prevImg, currentImg)
 	fmt.Printf("Found %d different pixels between %s and %s.\n", diffPixels, prevPath, currentPath)
 
-	// Generate output filename for the *current* image's diff
+	// Generate output filename for the *current* image's diff, placing it in the same directory
 	diffOutputName, err := generateOutputFilename(currentPath, "DIFF")
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Error generating diff filename for %s: %v. Skipping save.\n", currentPath, err)
@@ -212,12 +216,12 @@ func runDiffMode(inputFiles []string) {
 
 	// 1. Handle the first image (copy as BASE) - remains sequential
 	firstImagePath := inputFiles[0]
-	baseOutputName, err := generateOutputFilename(firstImagePath, "BASE")
+	baseOutputName, err := generateOutputFilename(firstImagePath, "BASE") // Pass full path
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Error generating base filename for %s: %v\n", firstImagePath, err)
 		os.Exit(1)
 	}
-	err = copyFile(firstImagePath, baseOutputName)
+	err = copyFile(firstImagePath, baseOutputName) // Use full output path
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Error copying base image %s to %s: %v\n", firstImagePath, baseOutputName, err)
 		os.Exit(1)
@@ -251,6 +255,7 @@ func runDiffMode(inputFiles []string) {
 		// If the previous image was loaded successfully, process the pair
 		if prevImage != nil {
 			wg.Add(1) // Increment counter before launching goroutine
+			// processPair now handles generating the correct output path based on currentPath
 			go processPair(&wg, prevImage, currentImage, prevImagePath, currentImagePath)
 		} else {
 			fmt.Fprintf(os.Stderr, "Skipping comparison for %s as previous image %s failed to load or process.\n", currentImagePath, prevImagePath)
@@ -290,13 +295,13 @@ func runJoinMode(inputFiles []string) {
 	}
 
 	// Save the first reconstructed image (which is just the base image)
-	originalBaseName, err := generateOriginalFilename(baseImagePath)
+	originalBaseName, err := generateOriginalFilename(baseImagePath) // Pass full path
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Failed to generate original filename for base %s: %v\n", baseImagePath, err)
 		os.Exit(1) // Cannot proceed without a valid name
 	}
 
-	outFileBase, err := os.Create(originalBaseName)
+	outFileBase, err := os.Create(originalBaseName) // Use full output path
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Failed to create output file %s: %v\n", originalBaseName, err)
 		os.Exit(1)
@@ -333,14 +338,14 @@ func runJoinMode(inputFiles []string) {
 		}
 
 		// Generate output name for the *newly* reconstructed image
-		originalDiffName, err := generateOriginalFilename(diffImagePath)
+		originalDiffName, err := generateOriginalFilename(diffImagePath) // Pass full path
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "Failed to generate original filename for diff %s: %v\n", diffImagePath, err)
 			os.Exit(1)
 		}
 
 		// Save the new reconstructed image
-		outFileDiff, err := os.Create(originalDiffName)
+		outFileDiff, err := os.Create(originalDiffName) // Use full output path
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "Failed to create output file %s: %v\n", originalDiffName, err)
 			os.Exit(1)
