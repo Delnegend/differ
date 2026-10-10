@@ -15,10 +15,10 @@ jobs:
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
 
       - name: Set up Go
-        uses: actions/setup-go@v5
+        uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5
         with:
           go-version: 'stable'
 
@@ -26,10 +26,10 @@ jobs:
         run: sudo apt-get update && sudo apt-get install parallel
 
       - name: Build for all platforms in parallel
+        env:
+          VERSION: ${{ inputs.version }}
         run: |
-          VERSION=${{ github.event.inputs.version }}
           export VERSION
-
           build_commands="
           mkdir -p dist/linux-amd64 && GOOS=linux GOARCH=amd64 go build -o dist/linux-amd64/differ .;
           mkdir -p dist/linux-arm64 && GOOS=linux GOARCH=arm64 go build -o dist/linux-arm64/differ .;
@@ -43,12 +43,12 @@ jobs:
           echo "$build_commands" | parallel -j 6 -- bash -c {}
 
       - name: Compress for all platforms in parallel
+        env:
+          VERSION: ${{ inputs.version }}
         run: |
-          VERSION=${{ github.event.inputs.version }}
           export VERSION
 
           compress_commands="
-          tar -czvf dist/differ-\${VERSION}-linux-amd64.tar.gz -C dist/linux-amd64 differ;
           tar -czvf dist/differ-\${VERSION}-linux-arm64.tar.gz -C dist/linux-arm64 differ;
           tar -czvf dist/differ-\${VERSION}-darwin-amd64.tar.gz -C dist/darwin-amd64 differ;
           tar -czvf dist/differ-\${VERSION}-darwin-arm64.tar.gz -C dist/darwin-arm64 differ;
@@ -61,7 +61,7 @@ jobs:
 
       - name: Create Release
         id: create_release
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@3bb12739c298aeb8a4eeaf626c5b8d85266b0e65 # v2
         with:
           files: |
             dist/differ-${{ github.event.inputs.version }}-linux-amd64.tar.gz
