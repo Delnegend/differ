@@ -16,7 +16,7 @@ permissions:
 
 jobs:
   check:
-    name: Check (go build + go vet)
+    name: Check (just check)
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
@@ -24,16 +24,14 @@ jobs:
         with:
           go-version-file: go.mod
           cache: true
+      - uses: extractions/setup-just@53165ef7e734c5c07cb06b3c8e7b647c5aa16db3 # v4
 
-      # Single-file CLI, no tests yet: compile and vet it.
-      - name: Build and vet
-        run: |
-          go build ./...
-          go vet ./...
+      - name: Run verification
+        run: just check
 
   # Security scans. They need Docker images and registry egress, so they only run
   # on GitHub-hosted runners. None of them is a required check — the gate stays
-  # `Check (go build + go vet)`.
+  # `Check (just check)`.
   secret-scan:
     name: Secret Scanning (Gitleaks)
     runs-on: ubuntu-latest
