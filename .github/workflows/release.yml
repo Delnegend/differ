@@ -74,7 +74,7 @@ jobs:
           set -euo pipefail
           just bump "$NEXT_STRICT"
 
-      - name: Commit, Tag, and Push atomically
+      - name: Tag HEAD and push atomically
         if: (inputs.target || 'new-tag') == 'new-tag' && steps.semver.outputs.bump != 'none'
         env:
           NEXT_TAG: ${{ steps.semver.outputs.next }}
@@ -83,18 +83,19 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "actions@users.noreply.github.com"
 
-          # Stage all modified tracked files (manifests and lockfiles)
+          # Manifest-less repo: Go versions live in git tags, and nothing in the
+          # tree names a version — so tag HEAD directly instead of inventing a
+          # commit. Changelog and artifacts all key off the tag.
           git add -u
-          # Manifest-less repo: the bump writes dist/.bump (untracked), so stage
-          # it explicitly — -u alone would never see it.
-          git add -f dist/.bump
-          git diff --staged --quiet && { echo "::error::bump produced no change in package files"; exit 1; }
-          git commit -m "chore(release): ${NEXT_TAG}"
+          if ! git diff --staged --quiet; then
+            echo "::error::unexpected staged changes in a manifest-less release" >&2
+            exit 1
+          fi
 
           git rev-parse -q --verify "refs/tags/${NEXT_TAG}" >/dev/null && { echo "::error::tag ${NEXT_TAG} already exists"; exit 1; }
           git tag -a "${NEXT_TAG}" -m "Release ${NEXT_TAG}"
 
-          # Atomic push: commit and tag land together on main
+          # Push: the tag lands on main's current HEAD
           git push origin HEAD:main "refs/tags/${NEXT_TAG}"
 
       # -----------------------------------------------------------------------
