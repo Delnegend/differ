@@ -1,75 +1,42 @@
-# Differ - Image Differencing Tool
+<div align="center">
 
-`differ` is a command-line utility designed to reduce the storage space required for sequences of similar images. It achieves this by storing the first image as a full "base" image and subsequent images as "difference" (diff) images, containing only the pixels that changed compared to the previous one. This concept is similar to inter-frame compression techniques used in video codecs like H.264, H.265, AV1, and VP9.
+# Differ
 
-When needed, the original sequence of images can be perfectly reconstructed by starting with the base image and sequentially applying the diff images.
+**Shrink a run of near-identical images: store the first frame whole and every following frame as its pixel diff, then rebuild the originals exactly.**
 
-## Features
+[![CI](https://img.shields.io/github/actions/workflow/status/Delnegend/differ/ci.yml?branch=main&style=flat-square)](https://github.com/Delnegend/differ/actions)
+[![License](https://img.shields.io/badge/license-MIT%20%7C%20Apache--2.0-blue?style=flat-square)](LICENSE-MIT)
 
-*   **Diff Mode (`-diff`):** Generates a `.BASE` copy of the first image and `.DIFF` files for subsequent images.
-*   **Join Mode (`-join`):** Reconstructs the original image sequence from a `.BASE` file and subsequent `.DIFF` files.
+</div>
 
-## Use Cases
+---
 
-*   Storing sequences of screenshots where only small portions change (e.g., UI testing, tutorials).
-*   Archiving versions of digital artwork or designs.
-*   Any scenario involving multiple, similar images where storage efficiency is desired.
-
-## Usage
-
-The tool operates in one of two modes: `-diff` or `-join`.
-
-### Generating Diff Files (`-diff`)
-
-Provide the sequence of original images as arguments. The first image will be copied with a `.BASE` suffix, and subsequent images will generate diff files with a `.DIFF` suffix relative to the *previous* image in the sequence.
+## Quick Start
 
 ```bash
-# Example: Process three images
-differ -diff frame01.png frame02.png frame03.png
+# 1. Build
+go build -o differ .
 
-# Output:
-# frame01.BASE.png  (Copy of frame01.png)
-# frame02.DIFF.png  (Differences between frame01.png and frame02.png)
-# frame03.DIFF.png  (Differences between frame02.png and frame03.png)
+# 2. Compress a sequence (first image kept whole, the rest become diffs)
+./differ -diff frame01.png frame02.png frame03.png
+
+# 3. Rebuild the exact originals from base + diffs
+./differ -join frame01.BASE.png frame02.DIFF.png frame03.DIFF.png
 ```
 
-### Reconstructing Original Images (`-join`)
+- **Lossless where it matters** — `A: 255` changed pixels overwrite the base while untouched pixels pass through; fully transparent source pixels are the documented edge, everything else round-trips.
 
-Provide the `.BASE` file followed by the sequence of `.DIFF` files in the correct order. The tool will reconstruct and save the original images.
+- **Frame-delta compression, no codec** — only changed pixels are stored per frame, like H.264 inter-frames without the container.
+- **No output directory to manage** — `.BASE` and `.DIFF` files land next to their sources with self-describing names.
+- **One static binary** — Go, no runtime, no config.
 
-```bash
-# Example: Reconstruct the three images from the previous example
-differ -join frame01.BASE.png frame02.DIFF.png frame03.DIFF.png
+## Layout
 
-# Output:
-# frame01.png (Reconstructed from frame01.BASE.png)
-# frame02.png (Reconstructed from frame01.BASE.png + frame02.DIFF.png)
-# frame03.png (Reconstructed from frame02.png + frame03.DIFF.png)
-```
-
-## Releases
-
-Check the [Releases](https://github.com/Delnegend/differ/releases) page for pre-built binaries.
-
-## Building
-
-Require the latest version of Go to build the tool.
-
-1.  Clone the repository or download the source code.
-2.  Navigate to the project directory in your terminal.
-3.  Run the build command:
-    ```bash
-    go build .
-    ```
-4.  This will create the `differ` (or `differ.exe` on Windows) executable in the current directory.
-
+| File | Purpose |
+|---|---|
+| `main.go` | The whole tool: `-diff` and `-join` modes, PNG encode/decode |
+| `go.mod` | Module `differ`, Go 1.24 |
 
 ## License
-Licensed under either of
 
-- Apache License, Version 2.0 ([LICENSE-Apache](./LICENSE-Apache) or [apache.org/licenses/LICENSE-2.0](http://www.apache.org/licenses/LICENSE-2.0))
-- MIT license ([LICENSE-MIT](./LICENSE-MIT) or [opensource.org/licenses/MIT](https://opensource.org/licenses/MIT))
-at your option.
-
-## Contribution
-Unless you explicitly state otherwise, any contribution intentionally submitted for inclusion in the work by you, as defined in the Apache-2.0 license, shall be dual licensed as above, without any additional terms or conditions.
+Dual-licensed under [MIT](LICENSE-MIT) or [Apache-2.0](LICENSE-APACHE), at your option.
