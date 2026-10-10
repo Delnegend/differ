@@ -37,6 +37,11 @@ go build -o differ .
 | `main.go` | The whole tool: `-diff` and `-join` modes, PNG encode/decode |
 | `go.mod` | Module `differ`, Go 1.24 |
 
+## Releases
+
+- Weekly `new-tag` runs cut a semver tag and publish six archives (`linux`/`darwin` amd64+arm64, `windows` amd64+arm64); versions live in git tags only, there is no manifest to bump.
+- `commit` target test-builds any commit and uploads the same six archives without publishing anything.
+
 ## License
 
 Dual-licensed under [MIT](LICENSE-MIT) or [Apache-2.0](LICENSE-APACHE), at your option.
