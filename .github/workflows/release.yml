@@ -1,75 +1,201 @@
-name: Build and Release
+name: Release / Build Artifacts
 
 on:
   workflow_dispatch:
     inputs:
-      version:
-        description: 'Release version (e.g., v1.0.0)'
+      target:
+        description: "Release mode / build target"
         required: true
+        type: choice
+        default: "new-tag"
+        options:
+          - new-tag  # Gate on CI -> bump version -> tag & push -> build & publish release
+          - tag      # Rebuild existing tag -> build & publish release
+          - commit   # Test build latest commit -> upload Actions artifacts only (no release)
+      ref:
+        description: "Custom tag or commit SHA (optional, defaults to latest)"
+        required: false
         type: string
+  schedule:
+    - cron: '0 0 * * 0' # Weekly: Sunday 00:00 UTC (defaults to target: new-tag)
+
+concurrency:
+  group: release-main
+  cancel-in-progress: false
+
+permissions:
+  contents: write
 
 jobs:
-  build:
-    name: Build and Release
+  prepare:
+    name: Prepare / Bump Version
     runs-on: ubuntu-latest
-
+    timeout-minutes: 30
+    outputs:
+      ref: ${{ steps.resolve.outputs.ref }}
+      version: ${{ steps.resolve.outputs.version }}
+      publish: ${{ steps.resolve.outputs.publish }}
+      skip: ${{ steps.resolve.outputs.skip }}
     steps:
-      - name: Checkout code
-        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
-
-      - name: Set up Go
-        uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
-          go-version: 'stable'
-
-      - name: Install GNU parallel
-        run: sudo apt-get update && sudo apt-get install parallel
-
-      - name: Build for all platforms in parallel
-        env:
-          VERSION: ${{ inputs.version }}
-        run: |
-          export VERSION
-          build_commands="
-          mkdir -p dist/linux-amd64 && GOOS=linux GOARCH=amd64 go build -o dist/linux-amd64/differ .;
-          mkdir -p dist/linux-arm64 && GOOS=linux GOARCH=arm64 go build -o dist/linux-arm64/differ .;
-          mkdir -p dist/darwin-amd64 && GOOS=darwin GOARCH=amd64 go build -o dist/darwin-amd64/differ .;
-          mkdir -p dist/darwin-arm64 && GOOS=darwin GOARCH=arm64 go build -o dist/darwin-arm64/differ .;
-          mkdir -p dist/windows-amd64 && GOOS=windows GOARCH=amd64 go build -o dist/windows-amd64/differ.exe .;
-          mkdir -p dist/windows-arm64 && GOOS=windows GOARCH=arm64 go build -o dist/windows-arm64/differ.exe .
-          "
-
-          # Execute build commands in parallel
-          echo "$build_commands" | parallel -j 6 -- bash -c {}
-
-      - name: Compress for all platforms in parallel
-        env:
-          VERSION: ${{ inputs.version }}
-        run: |
-          export VERSION
-
-          compress_commands="
-          tar -czvf dist/differ-\${VERSION}-linux-arm64.tar.gz -C dist/linux-arm64 differ;
-          tar -czvf dist/differ-\${VERSION}-darwin-amd64.tar.gz -C dist/darwin-amd64 differ;
-          tar -czvf dist/differ-\${VERSION}-darwin-arm64.tar.gz -C dist/darwin-arm64 differ;
-          cd dist/windows-amd64 && zip ../differ-\${VERSION}-windows-amd64.zip differ.exe && cd ../..;
-          cd dist/windows-arm64 && zip ../differ-\${VERSION}-windows-arm64.zip differ.exe && cd ../..
-          "
-
-          # Execute compress commands in parallel
-          echo "$compress_commands" | parallel -j 6 -- bash -c {}
-
-      - name: Create Release
-        id: create_release
-        uses: softprops/action-gh-release@3bb12739c298aeb8a4eeaf626c5b8d85266b0e65 # v2
+          token: ${{ github.token }}
+          persist_credentials: true
+          fetch-depth: 0   # Full git history for tags, commits, and semver-action
+      - uses: extractions/setup-just@53165ef7e734c5c07cb06b3c8e7b647c5aa16db3 # v4
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7
         with:
-          files: |
-            dist/differ-${{ github.event.inputs.version }}-linux-amd64.tar.gz
-            dist/differ-${{ github.event.inputs.version }}-linux-arm64.tar.gz
-            dist/differ-${{ github.event.inputs.version }}-darwin-amd64.tar.gz
-            dist/differ-${{ github.event.inputs.version }}-darwin-arm64.tar.gz
-            dist/differ-${{ github.event.inputs.version }}-windows-amd64.zip
-            dist/differ-${{ github.event.inputs.version }}-windows-arm64.zip
-          tag_name: ${{ github.event.inputs.version }}
-          make_latest: true
-          token: ${{ secrets.hehe }}
+          go-version-file: go.mod
+          cache: true
+
+      # -----------------------------------------------------------------------
+      # Mode 1: new-tag (calculate semver -> CI gate -> just bump -> atomic push)
+      # -----------------------------------------------------------------------
+      - name: Calculate Next SemVer
+        if: (inputs.target || 'new-tag') == 'new-tag'
+        id: semver
+        uses: ietf-tools/semver-action@c90370b2958652d71c06a3484129a4d423a6d8a8 # v1
+        with:
+          token: ${{ github.token }}
+          fallbackTag: v1.0.1
+          noNewCommitBehavior: silent
+          noVersionBumpBehavior: patch
+
+      - name: CI Gate (verify code is green before bumping)
+        if: (inputs.target || 'new-tag') == 'new-tag' && steps.semver.outputs.bump != 'none'
+        # Single repo: runs `just check`
+        run: just check
+
+      - name: Bump package manager version
+        if: (inputs.target || 'new-tag') == 'new-tag' && steps.semver.outputs.bump != 'none'
+        env:
+          NEXT_STRICT: ${{ steps.semver.outputs.nextStrict }}
+        run: |
+          set -euo pipefail
+          just bump "$NEXT_STRICT"
+
+      - name: Commit, Tag, and Push atomically
+        if: (inputs.target || 'new-tag') == 'new-tag' && steps.semver.outputs.bump != 'none'
+        env:
+          NEXT_TAG: ${{ steps.semver.outputs.next }}
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "actions@users.noreply.github.com"
+
+          # Stage all modified tracked files (manifests and lockfiles)
+          git add -u
+          # Manifest-less repo: the bump writes dist/.bump (untracked), so stage
+          # it explicitly — -u alone would never see it.
+          git add -f dist/.bump
+          git diff --staged --quiet && { echo "::error::bump produced no change in package files"; exit 1; }
+          git commit -m "chore(release): ${NEXT_TAG}"
+
+          git rev-parse -q --verify "refs/tags/${NEXT_TAG}" >/dev/null && { echo "::error::tag ${NEXT_TAG} already exists"; exit 1; }
+          git tag -a "${NEXT_TAG}" -m "Release ${NEXT_TAG}"
+
+          # Atomic push: commit and tag land together on main
+          git push origin HEAD:main "refs/tags/${NEXT_TAG}"
+
+      # -----------------------------------------------------------------------
+      # Resolve outputs for Job 2 (build)
+      # -----------------------------------------------------------------------
+      - name: Resolve outputs
+        id: resolve
+        env:
+          TARGET: ${{ inputs.target || 'new-tag' }}
+          INPUT_REF: ${{ inputs.ref }}
+          BUMP: ${{ steps.semver.outputs.bump }}
+          CURRENT: ${{ steps.semver.outputs.current }}
+          NEXT: ${{ steps.semver.outputs.next }}
+          NEXT_STRICT: ${{ steps.semver.outputs.nextStrict }}
+        run: |
+          set -euo pipefail
+          if [ "$TARGET" = "new-tag" ]; then
+            if [ "$BUMP" = "none" ]; then
+              echo "No version bump needed (current: ${CURRENT:-none})."
+              echo "skip=true" >> "$GITHUB_OUTPUT"
+              exit 0
+            fi
+            {
+              echo "ref=$NEXT"
+              echo "version=$NEXT_STRICT"
+              echo "publish=true"
+              echo "skip=false"
+            } >> "$GITHUB_OUTPUT"
+          elif [ "$TARGET" = "tag" ]; then
+            TAG="${INPUT_REF:-$(git tag -l 'v[0-9]*.[0-9]*.[0-9]*' --sort=-v:refname | head -n1 || true)}"
+            [ -n "$TAG" ] || { echo "::error::No release tag found"; exit 1; }
+            { echo "ref=$TAG"; echo "version=${TAG#v}"; echo "publish=true"; echo "skip=false"; } >> "$GITHUB_OUTPUT"
+          else
+            SHA="${INPUT_REF:-$(git rev-parse HEAD)}"
+            { echo "ref=$SHA"; echo "version=$SHA"; echo "publish=false"; echo "skip=false"; } >> "$GITHUB_OUTPUT"
+            echo "Running test build against commit $SHA (will not publish release)"
+          fi
+
+  build:
+    name: Build & Release Artifacts
+    needs: prepare
+    if: needs.prepare.outputs.skip != 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          ref: ${{ needs.prepare.outputs.ref }}
+          fetch-depth: 0
+
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      # Same six binaries as the legacy `Build and Release` ran, minus GNU
+      # parallel: matrix slots below run concurrently without an extra package,
+      # and the exported VERSION from prepare is the only version ever read.
+      - name: Build all six targets
+        env:
+          VERSION: ${{ needs.prepare.outputs.version }}
+        run: |
+          set -euo pipefail
+          build() {
+            local goos="$1" goarch="$2" ext="$3"
+            mkdir -p "dist/$goos-$goarch"
+            GOOS="$goos" GOARCH="$goarch" CGO_ENABLED=0 go build -o "dist/$goos-$goarch/differ$ext" .
+          }
+          build linux amd64 "" &
+          build linux arm64 "" &
+          build darwin amd64 "" &
+          build darwin arm64 "" &
+          build windows amd64 ".exe" &
+          build windows arm64 ".exe" &
+          wait
+
+      # Archive names match the legacy release exactly
+      # (differ-<version>-<platform>.tar.gz/.zip), so existing consume links
+      # and the table row keep working.
+      - name: Package archives
+        env:
+          VERSION: ${{ needs.prepare.outputs.version }}
+        run: |
+          set -euo pipefail
+          (cd dist/linux-amd64   && tar -czf ../differ-"$VERSION"-linux-amd64.tar.gz differ)
+          (cd dist/linux-arm64   && tar -czf ../differ-"$VERSION"-linux-arm64.tar.gz differ)
+          (cd dist/darwin-amd64  && tar -czf ../differ-"$VERSION"-darwin-amd64.tar.gz differ)
+          (cd dist/darwin-arm64  && tar -czf ../differ-"$VERSION"-darwin-arm64.tar.gz differ)
+          (cd dist/windows-amd64 && zip -q ../differ-"$VERSION"-windows-amd64.zip differ.exe)
+          (cd dist/windows-arm64 && zip -q ../differ-"$VERSION"-windows-arm64.zip differ.exe)
+
+      - name: Upload build artifacts (always kept in Actions run)
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
+        with:
+          name: build-artifacts-${{ needs.prepare.outputs.ref }}
+          path: dist/
+          if-no-files-found: ignore
+
+      - name: Publish Consolidated Release
+        if: needs.prepare.outputs.publish == 'true'
+        uses: softprops/action-gh-release@5113cdc90fd4d541c801c55356214017bf5ae34b # v3
+        with:
+          tag_name: ${{ needs.prepare.outputs.ref }}
+          generate_release_notes: true
+          files: dist/*
