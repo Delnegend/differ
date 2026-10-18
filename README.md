@@ -5,6 +5,7 @@
 **Shrink a run of near-identical images: store the first frame whole and every following frame as its pixel diff, then rebuild the originals exactly.**
 
 [![CI](https://img.shields.io/github/actions/workflow/status/Delnegend/differ/ci.yml?branch=main&style=flat-square)](https://github.com/Delnegend/differ/actions)
+[![Release](https://img.shields.io/github/v/release/Delnegend/differ?style=flat-square)](https://github.com/Delnegend/differ/releases)
 [![License](https://img.shields.io/badge/license-MIT%20%7C%20Apache--2.0-blue?style=flat-square)](LICENSE-MIT)
 
 </div>
