@@ -43,8 +43,8 @@ Prefer building from source? `go build -o differ .` needs Go 1.24+ and nothing e
 
 ## Releases
 
-- Weekly runs cut a semver tag and publish six archives (`linux`/`darwin` amd64+arm64, `windows` amd64+arm64); versions live in git tags only, there is no manifest to bump.
-- A run dispatched with a commit SHA test-builds it and uploads the same six archives without publishing anything. Dispatch modes are shared across projects ([Delnegend/actions](https://github.com/Delnegend/actions/blob/main/README.md)).
+- Weekly runs cut a semver tag and publish one Linux amd64 archive; versions live in git tags only, there is no manifest to bump. Other platforms build from source (`go build -o differ .`).
+- A run dispatched with a commit SHA test-builds it and uploads the same archive without publishing anything. Dispatch modes are shared across projects ([Delnegend/actions](https://github.com/Delnegend/actions/blob/main/README.md)).
 
 ## License
 
