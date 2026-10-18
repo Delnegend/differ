@@ -15,8 +15,9 @@
 ## Quick Start
 
 ```bash
-# 1. Build
-go build -o differ .
+# 1. Install (Linux x64; all six platform builds are on the releases page)
+URL=$(curl -fsSL https://api.github.com/repos/Delnegend/differ/releases/latest | grep -o 'https://[^"]*linux-amd64\.tar\.xz')
+curl -fsSL -o differ.tar.xz "$URL" && tar -xJf differ.tar.xz --strip-components=1
 
 # 2. Compress a sequence (first image kept whole, the rest become diffs)
 ./differ -diff frame01.png frame02.png frame03.png
@@ -24,6 +25,8 @@ go build -o differ .
 # 3. Rebuild the exact originals from base + diffs
 ./differ -join frame01.BASE.png frame02.DIFF.png frame03.DIFF.png
 ```
+
+Prefer building from source? `go build -o differ .` needs Go 1.24+ and nothing else.
 
 - **Lossless where it matters** — `A: 255` changed pixels overwrite the base while untouched pixels pass through; fully transparent source pixels are the documented edge, everything else round-trips.
 
