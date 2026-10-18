@@ -40,8 +40,8 @@ go build -o differ .
 
 ## Releases
 
-- Weekly `new-tag` runs cut a semver tag and publish six archives (`linux`/`darwin` amd64+arm64, `windows` amd64+arm64); versions live in git tags only, there is no manifest to bump.
-- `commit` target test-builds any commit and uploads the same six archives without publishing anything.
+- Weekly runs cut a semver tag and publish six archives (`linux`/`darwin` amd64+arm64, `windows` amd64+arm64); versions live in git tags only, there is no manifest to bump.
+- A run dispatched with a commit SHA test-builds it and uploads the same six archives without publishing anything.
 
 ## License
 
