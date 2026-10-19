@@ -18,8 +18,28 @@ build:
     set -euo pipefail
     mkdir -p dist/linux-amd64 && GOOS=linux GOARCH=amd64 go build -o dist/linux-amd64/differ .;
 
-# Go has no manifest: versions live in git tags, and the release workflow tags
-# HEAD directly. Intentional no-op — the step exists so `new-tag` keeps the
-# same shape as every other repo.
+# Release version lives in VERSION; `just bump` delegates to the version recipe.
 bump version:
-    @echo "Go versions are tracked via git tags; nothing to bump"
+    @just version bump "{{version}}"
+
+# Language-agnostic version contract for Delnegend/actions/resolve-release.
+version action ver="":
+    #!/usr/bin/env bash
+    set -euo pipefail
+    case "{{action}}" in
+      get)
+        cat VERSION
+        ;;
+      bump)
+        [ -n "{{ver}}" ] || { echo "usage: just version bump X.Y.Z" >&2; exit 1; }
+        NEW="{{ver}}"
+        OLD="$(cat VERSION 2>/dev/null || true)"
+        if [ "$NEW" = "$OLD" ]; then
+          echo "error: bump $NEW is a no-op (VERSION unchanged)" >&2
+          exit 1
+        fi
+        printf '%s\n' "$NEW" > VERSION
+        git diff -- VERSION
+        ;;
+      *) echo "usage: just version get|bump X.Y.Z" >&2; exit 1 ;;
+    esac
