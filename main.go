@@ -32,9 +32,7 @@ func loadImage(filePath string) (image.Image, error) {
 	return img, nil
 }
 
-// generateOutputFilename creates the full output path based on the input path and a suffix.
-// Example: generateOutputFilename("path/to/image.png", "BASE") -> "path/to/image.BASE.png"
-// Example: generateOutputFilename("path/to/image.jpg", "DIFF") -> "path/to/image.DIFF.jpg"
+// generateOutputFilename creates output path with specified suffix before file extension.
 func generateOutputFilename(inputPath, suffix string) (string, error) {
 	dir := filepath.Dir(inputPath)
 	ext := filepath.Ext(inputPath)
@@ -42,11 +40,8 @@ func generateOutputFilename(inputPath, suffix string) (string, error) {
 	if len(ext) > 0 {
 		baseName = strings.TrimSuffix(baseName, ext)
 	} else {
-		// Handle case where there might not be an extension, though unlikely for images
-		ext = ".png" // Default to png if no extension? Or maybe error? Let's default for now.
 		fmt.Fprintf(os.Stderr, "Warning: Input file %s has no extension, assuming %s for output.\n", inputPath, ext)
 	}
-	// Ensure suffix starts with a dot if not empty
 	if suffix != "" && !strings.HasPrefix(suffix, ".") {
 		suffix = "." + suffix
 	}
@@ -55,9 +50,7 @@ func generateOutputFilename(inputPath, suffix string) (string, error) {
 	return filepath.Join(dir, outputBaseName), nil
 }
 
-// generateOriginalFilename reconstructs the full original filename path by removing suffixes.
-// Example: generateOriginalFilename("path/to/image.BASE.png") -> "path/to/image.png"
-// Example: generateOriginalFilename("path/to/image.DIFF.jpg") -> "path/to/image.jpg"
+// generateOriginalFilename strips .BASE or .DIFF suffixes to reconstruct the original name.
 func generateOriginalFilename(inputPath string) (string, error) {
 	dir := filepath.Dir(inputPath)
 	ext := filepath.Ext(inputPath)
@@ -75,8 +68,6 @@ func generateOriginalFilename(inputPath string) (string, error) {
 	} else if strings.HasSuffix(originalName, ".DIFF") {
 		originalName = strings.TrimSuffix(originalName, ".DIFF")
 	} else {
-		// If no known suffix, maybe it's already the original? Or an error?
-		// Let's assume it might be an error in usage, but proceed cautiously.
 		fmt.Fprintf(os.Stderr, "Warning: Input file %s does not have expected .BASE or .DIFF suffix.\n", inputPath)
 	}
 
@@ -106,12 +97,12 @@ func copyFile(src, dst string) error {
 	if err != nil {
 		return fmt.Errorf("failed to copy file from %s to %s: %w", src, dst, err)
 	}
-	return destFile.Sync() // Ensure data is written to stable storage
+	return destFile.Sync()
 }
 
 // createDiffImage compares two images and returns an RGBA image holding the differences.
 func createDiffImage(baseImg, currentImg image.Image) (*image.RGBA, int) {
-	bounds := baseImg.Bounds() // Assumes dimensions are already checked
+	bounds := baseImg.Bounds()
 	diffImg := image.NewRGBA(bounds)
 	width, height := bounds.Dx(), bounds.Dy()
 	diffPixels := 0
@@ -131,14 +122,12 @@ func createDiffImage(baseImg, currentImg image.Image) (*image.RGBA, int) {
 	return diffImg, diffPixels
 }
 
-// processPair compares two images, creates a diff image, and saves it next to the current image.
-// Designed to be run in a goroutine.
+// processPair compares two images and writes differences as a DIFF image.
 func processPair(wg *sync.WaitGroup, prevImg image.Image, currentImg image.Image, prevPath, currentPath string) {
-	defer wg.Done() // Signal completion when this function returns
+	defer wg.Done()
 
 	fmt.Printf("Processing pair: %s vs %s\n", prevPath, currentPath)
 
-	// Check dimensions
 	bounds1 := prevImg.Bounds()
 	bounds2 := currentImg.Bounds()
 	if bounds1 != bounds2 {
@@ -147,36 +136,31 @@ func processPair(wg *sync.WaitGroup, prevImg image.Image, currentImg image.Image
 		return
 	}
 
-	// Create difference image
 	diffImg, diffPixels := createDiffImage(prevImg, currentImg)
 	fmt.Printf("Found %d different pixels between %s and %s.\n", diffPixels, prevPath, currentPath)
 
-	// Generate output filename for the *current* image's diff, placing it in the same directory
 	diffOutputName, err := generateOutputFilename(currentPath, "DIFF")
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Error generating diff filename for %s: %v. Skipping save.\n", currentPath, err)
 		return
 	}
 
-	// Save the difference image
 	outFile, err := os.Create(diffOutputName)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Failed to create output file %s: %v\n", diffOutputName, err)
-		return // Return on error
+		return
 	}
-	defer outFile.Close() // Ensure file is closed even on encode error
+	defer outFile.Close()
 
 	err = png.Encode(outFile, diffImg)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Failed to encode difference image to PNG %s: %v\n", diffOutputName, err)
-		// File will be closed by defer
 	} else {
 		fmt.Printf("Difference image saved to %s\n", diffOutputName)
 	}
 }
 
-// applyDiff combines a base image and a diff image (where diff pixels overwrite base).
-// Returns the newly reconstructed image.
+// applyDiff reconstructs an image by applying diff pixels over the base image.
 func applyDiff(baseImg, diffImg image.Image) (*image.RGBA, error) {
 	boundsBase := baseImg.Bounds()
 	boundsDiff := diffImg.Bounds()
@@ -194,7 +178,6 @@ func applyDiff(baseImg, diffImg image.Image) (*image.RGBA, error) {
 
 			diffPixelColor := color.RGBAModel.Convert(diffImg.At(absX, absY)).(color.RGBA)
 
-			// If the diff pixel has non-zero alpha, use its color. Otherwise, use the base image color.
 			if diffPixelColor.A > 0 {
 				reconstructed.Set(absX, absY, diffPixelColor)
 			} else {
@@ -206,7 +189,7 @@ func applyDiff(baseImg, diffImg image.Image) (*image.RGBA, error) {
 	return reconstructed, nil
 }
 
-// runDiffMode handles the logic for creating BASE and DIFF files concurrently.
+// runDiffMode generates BASE and DIFF images concurrently.
 func runDiffMode(inputFiles []string) {
 	if len(inputFiles) < 2 {
 		fmt.Fprintln(os.Stderr, "Error: -diff mode requires at least two input images.")
@@ -214,35 +197,31 @@ func runDiffMode(inputFiles []string) {
 		os.Exit(1)
 	}
 
-	// 1. Handle the first image (copy as BASE) - remains sequential
 	firstImagePath := inputFiles[0]
-	baseOutputName, err := generateOutputFilename(firstImagePath, "BASE") // Pass full path
+	baseOutputName, err := generateOutputFilename(firstImagePath, "BASE")
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Error generating base filename for %s: %v\n", firstImagePath, err)
 		os.Exit(1)
 	}
-	err = copyFile(firstImagePath, baseOutputName) // Use full output path
+	err = copyFile(firstImagePath, baseOutputName)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Error copying base image %s to %s: %v\n", firstImagePath, baseOutputName, err)
 		os.Exit(1)
 	}
 	fmt.Printf("Copied base image %s to %s\n", firstImagePath, baseOutputName)
 
-	// 2. Process consecutive pairs for differences concurrently
-	var wg sync.WaitGroup // Initialize WaitGroup
-
-	var prevImage image.Image // Store the previously loaded image
+	var wg sync.WaitGroup
+	var prevImage image.Image
 	prevImage, err = loadImage(firstImagePath)
 	if err != nil {
-		fmt.Fprintln(os.Stderr, err) // loadImage already includes path info
-		os.Exit(1)                   // Exit if the very first image fails to load
+		fmt.Fprintln(os.Stderr, err)
+		os.Exit(1)
 	}
 	prevImagePath := firstImagePath
 
 	for i := 1; i < len(inputFiles); i++ {
 		currentImagePath := inputFiles[i]
 
-		// Load current image sequentially
 		currentImage, err := loadImage(currentImagePath)
 		if err != nil {
 			fmt.Fprintln(os.Stderr, err)
@@ -252,28 +231,24 @@ func runDiffMode(inputFiles []string) {
 			continue
 		}
 
-		// If the previous image was loaded successfully, process the pair
 		if prevImage != nil {
-			wg.Add(1) // Increment counter before launching goroutine
-			// processPair now handles generating the correct output path based on currentPath
+			wg.Add(1)
 			go processPair(&wg, prevImage, currentImage, prevImagePath, currentImagePath)
 		} else {
 			fmt.Fprintf(os.Stderr, "Skipping comparison for %s as previous image %s failed to load or process.\n", currentImagePath, prevImagePath)
 		}
 
-		// Update prevImage and prevImagePath for the *next* iteration's comparison
 		prevImage = currentImage
 		prevImagePath = currentImagePath
 	}
 
-	// Wait for all launched goroutines to complete
 	fmt.Println("\nWaiting for image processing tasks to complete...")
 	wg.Wait()
 
 	fmt.Println("\nDiff processing complete.")
 }
 
-// runJoinMode handles the logic for reconstructing images sequentially.
+// runJoinMode reconstructs original images from BASE and DIFF files sequentially.
 func runJoinMode(inputFiles []string) {
 	if len(inputFiles) < 2 {
 		fmt.Fprintln(os.Stderr, "Error: -join mode requires at least two input images (base + diffs).")
@@ -281,42 +256,36 @@ func runJoinMode(inputFiles []string) {
 		os.Exit(1)
 	}
 
-	// Expecting files like: base.BASE.png, img2.DIFF.png, img3.DIFF.png ...
 	baseImagePath := inputFiles[0]
 	if !strings.Contains(filepath.Base(baseImagePath), ".BASE.") {
 		fmt.Fprintf(os.Stderr, "Warning: First file %s for -join mode does not appear to be a .BASE file.\n", baseImagePath)
 	}
 
-	// Load the initial base image
 	currentReconstructedImage, err := loadImage(baseImagePath)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Failed to load base image %s: %v\n", baseImagePath, err)
 		os.Exit(1)
 	}
 
-	// Save the first reconstructed image (which is just the base image)
-	originalBaseName, err := generateOriginalFilename(baseImagePath) // Pass full path
+	originalBaseName, err := generateOriginalFilename(baseImagePath)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Failed to generate original filename for base %s: %v\n", baseImagePath, err)
-		os.Exit(1) // Cannot proceed without a valid name
+		os.Exit(1)
 	}
 
-	outFileBase, err := os.Create(originalBaseName) // Use full output path
+	outFileBase, err := os.Create(originalBaseName)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Failed to create output file %s: %v\n", originalBaseName, err)
 		os.Exit(1)
 	}
-	// Encode requires an image.Image, loadImage returns one. Need to ensure PNG format?
-	// Let's re-encode as PNG for consistency, though copying might be faster if format is known.
 	err = png.Encode(outFileBase, currentReconstructedImage)
-	outFileBase.Close() // Close immediately
+	outFileBase.Close()
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Failed to save reconstructed base image %s: %v\n", originalBaseName, err)
 		os.Exit(1)
 	}
 	fmt.Printf("Saved reconstructed base image: %s\n", originalBaseName)
 
-	// Process subsequent DIFF files sequentially
 	for i := 1; i < len(inputFiles); i++ {
 		diffImagePath := inputFiles[i]
 		if !strings.Contains(filepath.Base(diffImagePath), ".DIFF.") {
@@ -327,38 +296,34 @@ func runJoinMode(inputFiles []string) {
 		diffImage, err := loadImage(diffImagePath)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "Failed to load diff image %s: %v. Stopping reconstruction.\n", diffImagePath, err)
-			os.Exit(1) // Cannot continue sequence if a diff is missing/corrupt
+			os.Exit(1)
 		}
 
-		// Apply the diff to the last reconstructed image
 		newReconstructedImage, err := applyDiff(currentReconstructedImage, diffImage)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "Failed to apply diff %s: %v. Stopping reconstruction.\n", diffImagePath, err)
 			os.Exit(1)
 		}
 
-		// Generate output name for the *newly* reconstructed image
-		originalDiffName, err := generateOriginalFilename(diffImagePath) // Pass full path
+		originalDiffName, err := generateOriginalFilename(diffImagePath)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "Failed to generate original filename for diff %s: %v\n", diffImagePath, err)
 			os.Exit(1)
 		}
 
-		// Save the new reconstructed image
-		outFileDiff, err := os.Create(originalDiffName) // Use full output path
+		outFileDiff, err := os.Create(originalDiffName)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "Failed to create output file %s: %v\n", originalDiffName, err)
 			os.Exit(1)
 		}
 		err = png.Encode(outFileDiff, newReconstructedImage)
-		outFileDiff.Close() // Close immediately
+		outFileDiff.Close()
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "Failed to save reconstructed image %s: %v\n", originalDiffName, err)
 			os.Exit(1)
 		}
 		fmt.Printf("Saved reconstructed image: %s\n", originalDiffName)
 
-		// Update the current reconstructed image for the next iteration
 		currentReconstructedImage = newReconstructedImage
 	}
 
@@ -375,7 +340,7 @@ func printUsage() {
 	fmt.Println("    Input: image1.BASE.png image2.DIFF.png image3.DIFF.png ...")
 	fmt.Println("    Output: image1.png, image2.png, image3.png, ...")
 	fmt.Println("\nFlags:")
-	flag.PrintDefaults() // Print default flag values (like -diff=false)
+	flag.PrintDefaults()
 }
 
 func main() {
@@ -384,7 +349,6 @@ func main() {
 
 	flag.Parse()
 
-	// Validate mode selection
 	if (*diffMode && *joinMode) || (!*diffMode && !*joinMode) {
 		fmt.Fprintln(os.Stderr, "Error: Please specify exactly one mode: -diff or -join")
 		printUsage()
@@ -401,5 +365,5 @@ func main() {
 		runJoinMode(inputFiles)
 	}
 
-	fmt.Println("\nProcessing complete.") // This might be redundant now
+	fmt.Println("\nProcessing complete.")
 }
