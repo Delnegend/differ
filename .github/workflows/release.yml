@@ -107,7 +107,7 @@ jobs:
           GOOS="$GOOS" GOARCH="$GOARCH" CGO_ENABLED=0 go build -o "differ$ext" .
 
       - name: Package artifact
-        uses: Delnegend/actions/package-artifact@62064acc9dce2872175e85b3b2e1c2295cd1bee7 # v1
+        uses: Delnegend/actions/package-artifact@cc01ad7470776ce23b38f14823a86d560e2d592e # v1
         with:
           name: differ
           version: ${{ needs.prepare.outputs.version }}
