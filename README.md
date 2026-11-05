@@ -28,11 +28,11 @@ curl -fsSL -o differ.tar.xz "$URL" && tar -xJf differ.tar.xz --strip-components=
 
 Prefer building from source? `go build -o differ .` needs Go 1.24+ and nothing else.
 
-- **Lossless where it matters** — `A: 255` changed pixels overwrite the base while untouched pixels pass through; fully transparent source pixels are the documented edge, everything else round-trips.
+- **Lossless where it matters**: `A: 255` changed pixels overwrite the base while untouched pixels pass through; fully transparent source pixels are the documented edge, everything else round-trips.
 
-- **Frame-delta compression, no codec** — only changed pixels are stored per frame, like H.264 inter-frames without the container.
-- **No output directory to manage** — `.BASE` and `.DIFF` files land next to their sources with self-describing names.
-- **One static binary** — Go, no runtime, no config.
+- **Frame-delta compression, no codec**: only changed pixels are stored per frame, like H.264 inter-frames without the container.
+- **No output directory to manage**: `.BASE` and `.DIFF` files land next to their sources with self-describing names.
+- **One static binary**: Go, no runtime, no config.
 
 ## Layout
 

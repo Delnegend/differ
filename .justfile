@@ -1,4 +1,4 @@
-# Differ — dev workflows
+# Differ - dev workflows
 
 # Verify formatting, vet, and tests (CI gate: `Check (just check)`)
 check:
