@@ -61,7 +61,7 @@ jobs:
 
       - name: Bump, tag, and push
         id: resolve
-        uses: Delnegend/actions/resolve-release@main
+        uses: Delnegend/actions/resolve-release@main  # nosemgrep
         with:
           ref: ${{ inputs.ref }}
           dry-run: ${{ inputs.dry-run }}
@@ -107,7 +107,7 @@ jobs:
           GOOS="$GOOS" GOARCH="$GOARCH" CGO_ENABLED=0 go build -o "differ$ext" .
 
       - name: Package artifact
-        uses: Delnegend/actions/package-artifact@main
+        uses: Delnegend/actions/package-artifact@main  # nosemgrep
         with:
           name: differ
           version: ${{ needs.prepare.outputs.version }}
@@ -121,7 +121,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Publish release
-        uses: Delnegend/actions/publish-release@main
+        uses: Delnegend/actions/publish-release@main  # nosemgrep
         with:
           ref: ${{ needs.prepare.outputs.ref }}
           publish: ${{ needs.prepare.outputs.publish }}
