@@ -28,23 +28,18 @@ curl -fsSL -o differ.tar.xz "$URL" && tar -xJf differ.tar.xz --strip-components=
 
 Prefer building from source? `go build -o differ .` needs Go 1.24+ and nothing else.
 
-- **Lossless where it matters**: `A: 255` changed pixels overwrite the base while untouched pixels pass through; fully transparent source pixels are the documented edge, everything else round-trips.
+## Highlights
 
+- **Lossless where it matters**: `A: 255` changed pixels overwrite the base while untouched pixels pass through; fully transparent source pixels are the documented edge, everything else round-trips.
 - **Frame-delta compression, no codec**: only changed pixels are stored per frame, like H.264 inter-frames without the container.
 - **No output directory to manage**: `.BASE` and `.DIFF` files land next to their sources with self-describing names.
 - **One static binary**: Go, no runtime, no config.
 
-## Layout
+## Documentation
 
-| File | Purpose |
-|---|---|
-| `main.go` | The whole tool: `-diff` and `-join` modes, PNG encode/decode |
-| `go.mod` | Module `differ`, Go 1.24 |
-
-## Releases
-
-- Weekly runs cut a semver tag and publish one Linux amd64 archive; versions live in git tags only, there is no manifest to bump. Other platforms build from source (`go build -o differ .`).
-- A run dispatched with a commit SHA test-builds it and uploads the same archive without publishing anything. Dispatch modes are shared across projects ([Delnegend/actions](https://github.com/Delnegend/actions/blob/main/README.md)).
+- **[Architecture](docs/architecture.md)**: Frame-delta compression pipeline, file layout, and lossless reconstruction invariants.
+- **[Development](docs/development.md)**: Building from source, running tests, and semver tag release workflow.
+- **[Deployment](docs/deployment.md)**: Installation via release archives, binary verification, and environment setup.
 
 ## License
 

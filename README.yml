@@ -1,0 +1,42 @@
+$schema: "./README.schema.json"
+
+name: Differ
+repo: Delnegend/differ
+tagline: "Shrink a run of near-identical images: store the first frame whole and every following frame as its pixel diff, then rebuild the originals exactly."
+
+badges:
+  ci: true
+  release: true
+  license: true
+
+quick_start: |
+  ```bash
+  # 1. Install (Linux x64; all six platform builds are on the releases page)
+  URL=$(curl -fsSL https://api.github.com/repos/Delnegend/differ/releases/latest | grep -o 'https://[^"]*linux-amd64\.tar\.xz')
+  curl -fsSL -o differ.tar.xz "$URL" && tar -xJf differ.tar.xz --strip-components=1
+
+  # 2. Compress a sequence (first image kept whole, the rest become diffs)
+  ./differ -diff frame01.png frame02.png frame03.png
+
+  # 3. Rebuild the exact originals from base + diffs
+  ./differ -join frame01.BASE.png frame02.DIFF.png frame03.DIFF.png
+  ```
+
+  Prefer building from source? `go build -o differ .` needs Go 1.24+ and nothing else.
+
+highlights:
+  - "**Lossless where it matters**: `A: 255` changed pixels overwrite the base while untouched pixels pass through; fully transparent source pixels are the documented edge, everything else round-trips."
+  - "**Frame-delta compression, no codec**: only changed pixels are stored per frame, like H.264 inter-frames without the container."
+  - "**No output directory to manage**: `.BASE` and `.DIFF` files land next to their sources with self-describing names."
+  - "**One static binary**: Go, no runtime, no config."
+
+documentation:
+  architecture: "Frame-delta compression pipeline, file layout, and lossless reconstruction invariants."
+  development: "Building from source, running tests, and semver tag release workflow."
+  deployment: "Installation via release archives, binary verification, and environment setup."
+
+license:
+  type:
+    - MIT
+    - APACHE-2.0
+  holder: "Delnegend"
