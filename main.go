@@ -63,10 +63,10 @@ func generateOriginalFilename(inputPath string) (string, error) {
 	}
 
 	originalName := nameWithoutExt
-	if strings.HasSuffix(originalName, ".BASE") {
-		originalName = strings.TrimSuffix(originalName, ".BASE")
-	} else if strings.HasSuffix(originalName, ".DIFF") {
-		originalName = strings.TrimSuffix(originalName, ".DIFF")
+	if before, ok := strings.CutSuffix(originalName, ".BASE"); ok {
+		originalName = before
+	} else if before, ok := strings.CutSuffix(originalName, ".DIFF"); ok {
+		originalName = before
 	} else {
 		fmt.Fprintf(os.Stderr, "Warning: Input file %s does not have expected .BASE or .DIFF suffix.\n", inputPath)
 	}
